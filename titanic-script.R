@@ -1,21 +1,21 @@
 library(ggplot2)
-library(reshape)
-library(zoo)
+library(rpart)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
 rm(list=ls())
 setwd("/home/erpreciso/Documents/school/titanic")
 train <- read.csv("data/train.csv")
 test <- read.csv("data/test.csv")
 
-# evaluate fare paid
+##  decision tree
+fit <- rpart(Survived ~ Pclass + Sex + Age  + Fare + Embarked,
+             data=train, method="class")
+fancyRpartPlot(fit) # show tree
 
-##  prevision based on sex and fare
-titanic.model <- lm(Survived ~ Sex + Fare, data=train)
-test[is.na(test$Fare), "Fare"] <- median(test$Fare, na.rm=TRUE)
-test$Survived <- round(predict(titanic.model, test))
+test$Survived <- predict(fit, test, type="class")
+
+# format for submission, check for missing values and export
 submission <- test[,c("PassengerId", "Survived")]
-
-# check of no missing values
 paste("Missing value #: ", sum(is.na(submission$Survived)))
-
-# export for submission
-write.csv(submission, "submissions/genderfarelm.csv", row.names=FALSE)
+write.csv(submission, "submissions/decisiontreelm.csv", row.names=FALSE)
