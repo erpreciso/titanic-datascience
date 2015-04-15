@@ -3,6 +3,9 @@ library(rpart)
 library(rattle)
 library(rpart.plot)
 library(RColorBrewer)
+library(randomForest)
+library(party)
+
 rm(list=ls())
 setwd("/home/erpreciso/Documents/school/titanic")
 train <- read.csv("data/train.csv")
@@ -40,19 +43,46 @@ family.frequencies <- family.frequencies[family.frequencies$Freq<=2,]
 combi$family.ID[combi$family.ID %in% family.frequencies$Var1] <- "Small"
 combi$family.ID <- as.factor(combi$family.ID)
 
+# predict age
+Agefit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare +
+                    Embarked + title + family.size,
+                data=combi[!is.na(combi$Age),],
+                method="anova")
+combi$Age[is.na(combi$Age)] <- predict(Agefit, combi[is.na(combi$Age),])
+
+# integrate Embarked
+combi$Embarked[combi$Embarked==""] <- "S"
+combi$Embarked <- as.factor(combi$Embarked)
+
+# integrate Fare
+combi$Fare[is.na(combi$Fare)] <- median(combi$Fare, na.rm=TRUE)
+
+# split again families less than 3 instead of 2
+combi$family.ID.2 <- combi$family.ID
+combi$family.ID.2 <- as.character(combi$family.ID.2)
+combi$family.ID.2[combi$family.size<=3] <- "Small"
+combi$family.ID.2 <- factor(combi$family.ID.2)
+
 # rebreak train and test
 train <- combi[1:891,]
 test <- combi[892:1309,]
 
-##  decision tree
-fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare +
-                 Embarked + title + family.size + family.ID,
-             data=train, method="class")
-fancyRpartPlot(fit) # show tree
+# random forest!
+set.seed(123)
+# fit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare +
+#                  Embarked + title + family.size + family.ID.2,
+#              data=train, importance=TRUE, ntree=2000)
+# varImpPlot(fit) # show tree
+# 
+# test$Survived <- predict(fit, test)
 
-test$Survived <- predict(fit, test, type="class")
+fit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch + Fare + 
+                   Embarked + title + family.size + family.ID,
+               data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+
+test$Survived <- predict(fit, test, OOB=TRUE, type="response")
 
 # format for submission, check for missing values and export
 submission <- test[,c("PassengerId", "Survived")]
 paste("Missing value #: ", sum(is.na(submission$Survived)))
-write.csv(submission, "submissions/engineeredvars.csv", row.names=FALSE)
+write.csv(submission, "submissions/randomforest2.csv", row.names=FALSE)
